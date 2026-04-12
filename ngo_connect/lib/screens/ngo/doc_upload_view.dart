@@ -43,24 +43,39 @@ class _DocUploadViewState extends State<DocUploadView> {
       return;
     }
 
+    // Client-side validation
+    final typeResult = validateFileType(file.name);
+    if (!typeResult.isValid) {
+      setState(() => _uploadError = typeResult.error);
+      return;
+    }
+    final sizeResult = validateFileSize(file.bytes!.length);
+    if (!sizeResult.isValid) {
+      setState(() => _uploadError = sizeResult.error);
+      return;
+    }
+
     setState(() => _isUploading = true);
 
     try {
-      await StorageService.uploadDocument(
-        ngoId: widget.ngoId,
-        filename: file.name,
-        bytes: file.bytes!,
-        mimeType: file.extension == 'pdf' ? 'application/pdf' : 'text/csv',
-      );
+      // Save metadata to Firestore directly (Storage CORS requires server config).
+      final lower = file.name.toLowerCase();
+      final contentType = lower.endsWith('.pdf') ? 'application/pdf' : 'text/csv';
+      await FirebaseService.saveDocumentMetadata({
+        'ngoId': widget.ngoId,
+        'filename': file.name,
+        'contentType': contentType,
+        'storagePath': 'documents/${widget.ngoId}/${file.name}',
+        'downloadUrl': '',
+        'sizeBytes': file.bytes!.length,
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Uploaded: ${file.name}'),
+              content: Text('Document recorded: ${file.name}'),
               backgroundColor: Colors.green),
         );
       }
-    } on StorageUploadException catch (e) {
-      setState(() => _uploadError = e.message);
     } catch (e) {
       setState(() => _uploadError = 'Upload failed: $e');
     } finally {

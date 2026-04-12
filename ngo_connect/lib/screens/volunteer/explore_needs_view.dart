@@ -282,43 +282,43 @@ class _ExploreNeedsViewState extends State<ExploreNeedsView> {
     final deadlineStr =
         '${need.deadline.day}/${need.deadline.month}/${need.deadline.year}';
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.borderGrey),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10, offset: const Offset(0, 4))
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row: NGO + urgency badge
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                backgroundColor: AppTheme.backgroundLight,
-                radius: 20,
-                child: const Icon(Icons.business, color: AppTheme.primaryPurple, size: 20),
+                backgroundColor: AppTheme.primaryPurple.withOpacity(0.1),
+                radius: 18,
+                child: const Icon(Icons.business, color: AppTheme.primaryPurple, size: 18),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(need.ngoId,
+                    Text(need.category,
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, color: AppTheme.textDark, fontSize: 13),
+                            fontWeight: FontWeight.w600, color: AppTheme.textDark, fontSize: 12),
                         overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined, size: 12, color: AppTheme.textGrey),
-                        const SizedBox(width: 4),
+                        const Icon(Icons.location_on_outlined, size: 11, color: AppTheme.textGrey),
+                        const SizedBox(width: 2),
                         Flexible(
                           child: Text(need.location,
-                              style: const TextStyle(color: AppTheme.textGrey, fontSize: 12),
+                              style: const TextStyle(color: AppTheme.textGrey, fontSize: 11),
                               overflow: TextOverflow.ellipsis),
                         ),
                       ],
@@ -330,74 +330,72 @@ class _ExploreNeedsViewState extends State<ExploreNeedsView> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                     color: urgencyColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: urgencyColor.withOpacity(0.2))),
-                child: Row(
-                  children: [
-                    Icon(Icons.schedule, size: 12, color: urgencyColor),
-                    const SizedBox(width: 4),
-                    Text(_urgencyLabel(need.urgency),
-                        style: TextStyle(
-                            color: urgencyColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(need.title,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, height: 1.3),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 8),
-          Text(need.description,
-              style: const TextStyle(
-                  color: AppTheme.textDark, fontSize: 13, height: 1.5),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: need.skills
-                .take(4)
-                .map((s) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                          color: AppTheme.backgroundLight,
-                          borderRadius: BorderRadius.circular(6)),
-                      child: Text(s,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                    ))
-                .toList(),
-          ),
-          const Spacer(),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Icon(Icons.calendar_today_outlined, size: 14, color: AppTheme.textGrey),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text('Deadline: $deadlineStr',
-                    style: const TextStyle(fontSize: 12, color: AppTheme.textGrey),
-                    overflow: TextOverflow.ellipsis),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: urgencyColor.withOpacity(0.3))),
+                child: Text(_urgencyLabel(need.urgency),
+                    style: TextStyle(
+                        color: urgencyColor, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
           const SizedBox(height: 12),
+          // Title
+          Text(need.title,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, height: 1.3),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 6),
+          // Description
+          Text(need.description,
+              style: const TextStyle(color: AppTheme.textGrey, fontSize: 12, height: 1.4),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 10),
+          // Skills
+          if (need.skills.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: need.skills
+                  .take(3)
+                  .map((s) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                            color: AppTheme.backgroundLight,
+                            borderRadius: BorderRadius.circular(6)),
+                        child: Text(s,
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+                      ))
+                  .toList(),
+            ),
+          const SizedBox(height: 10),
+          // Deadline
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined, size: 12, color: AppTheme.textGrey),
+              const SizedBox(width: 4),
+              Text('Deadline: $deadlineStr',
+                  style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Apply button — always visible
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () => _openTaskDetail(context, need),
               style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+                backgroundColor: AppTheme.primaryPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('View & Apply'),
-                  SizedBox(width: 4),
-                  Icon(Icons.arrow_forward, size: 14),
+                  Icon(Icons.volunteer_activism, size: 14),
+                  SizedBox(width: 6),
+                  Text('View & Apply', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),

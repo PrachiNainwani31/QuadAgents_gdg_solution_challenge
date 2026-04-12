@@ -159,8 +159,8 @@ class KanbanBoardView extends StatelessWidget {
   Widget _assignmentCard(BuildContext context,
       QueryDocumentSnapshot doc, String currentStatus) {
     final d = doc.data() as Map<String, dynamic>;
-    final volunteerId = d['volunteerId'] as String? ?? '—';
-    final needId = d['needId'] as String? ?? '—';
+    final volunteerId = d['volunteerId'] as String? ?? '';
+    final needId = d['needId'] as String? ?? '';
     final invitedAt = d['invitedAt'];
     String dateStr = '—';
     if (invitedAt is Timestamp) {
@@ -170,83 +170,15 @@ class KanbanBoardView extends StatelessWidget {
 
     final nextStatus = _nextStatus(currentStatus);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderGrey),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.03), blurRadius: 4)
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor:
-                    AppTheme.primaryPurple.withOpacity(0.1),
-                child: const Icon(Icons.person,
-                    size: 14, color: AppTheme.primaryPurple),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  volunteerId.length > 10
-                      ? '${volunteerId.substring(0, 10)}…'
-                      : volunteerId,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text('Need: $needId',
-              style: const TextStyle(
-                  fontSize: 11, color: AppTheme.textGrey),
-              overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 4),
-          Text('Invited: $dateStr',
-              style: const TextStyle(
-                  fontSize: 11, color: AppTheme.textGrey)),
-
-          // Requirement 7.4: prompt rating when NGO marks verified
-          if (currentStatus == 'reported') ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () =>
-                    _advanceStatus(context, doc.id, currentStatus),
-                style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    textStyle: const TextStyle(fontSize: 12)),
-                child: const Text('Mark Verified'),
-              ),
-            ),
-          ] else if (nextStatus != null &&
-              currentStatus != 'closed') ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () =>
-                    _advanceStatus(context, doc.id, currentStatus),
-                style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    textStyle: const TextStyle(fontSize: 12)),
-                child: Text('→ ${_columnLabel(nextStatus)}'),
-              ),
-            ),
-          ],
-        ],
-      ),
+    return _AssignmentCard(
+      assignmentId: doc.id,
+      volunteerId: volunteerId,
+      needId: needId,
+      dateStr: dateStr,
+      currentStatus: currentStatus,
+      nextStatus: nextStatus,
+      onAdvance: () => _advanceStatus(context, doc.id, currentStatus),
+      columnLabel: _columnLabel,
     );
   }
 
@@ -346,5 +278,151 @@ class KanbanBoardView extends StatelessWidget {
       default:
         return status[0].toUpperCase() + status.substring(1);
     }
+  }
+}
+
+/// A card that resolves volunteer name and need title from Firestore.
+class _AssignmentCard extends StatefulWidget {
+  final String assignmentId;
+  final String volunteerId;
+  final String needId;
+  final String dateStr;
+  final String currentStatus;
+  final String? nextStatus;
+  final VoidCallback onAdvance;
+  final String Function(String) columnLabel;
+
+  const _AssignmentCard({
+    required this.assignmentId,
+    required this.volunteerId,
+    required this.needId,
+    required this.dateStr,
+    required this.currentStatus,
+    required this.nextStatus,
+    required this.onAdvance,
+    required this.columnLabel,
+  });
+
+  @override
+  State<_AssignmentCard> createState() => _AssignmentCardState();
+}
+
+class _AssignmentCardState extends State<_AssignmentCard> {
+  String _volunteerName = '';
+  String _needTitle = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNames();
+  }
+
+  Future<void> _loadNames() async {
+    final results = await Future.wait([
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.volunteerId)
+          .get(),
+      FirebaseFirestore.instance
+          .collection('needs')
+          .doc(widget.needId)
+          .get(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _volunteerName =
+            (results[0].data() as Map<String, dynamic>?)?['name']
+                    as String? ??
+                widget.volunteerId;
+        _needTitle =
+            (results[1].data() as Map<String, dynamic>?)?['title']
+                    as String? ??
+                widget.needId;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName =
+        _volunteerName.isEmpty ? widget.volunteerId : _volunteerName;
+    final displayTitle =
+        _needTitle.isEmpty ? widget.needId : _needTitle;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderGrey),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.03), blurRadius: 4)
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor:
+                    AppTheme.primaryPurple.withOpacity(0.1),
+                child: const Icon(Icons.person,
+                    size: 14, color: AppTheme.primaryPurple),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  displayName,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            displayTitle,
+            style: const TextStyle(fontSize: 12, color: AppTheme.textDark),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+          ),
+          const SizedBox(height: 4),
+          Text('Invited: ${widget.dateStr}',
+              style: const TextStyle(
+                  fontSize: 11, color: AppTheme.textGrey)),
+          if (widget.currentStatus == 'reported') ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: widget.onAdvance,
+                style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12)),
+                child: const Text('Mark Verified'),
+              ),
+            ),
+          ] else if (widget.nextStatus != null &&
+              widget.currentStatus != 'closed') ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: widget.onAdvance,
+                style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12)),
+                child: Text('→ ${widget.columnLabel(widget.nextStatus!)}'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

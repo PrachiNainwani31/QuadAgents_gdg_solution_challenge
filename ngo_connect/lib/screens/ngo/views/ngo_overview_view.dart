@@ -261,10 +261,14 @@ class NgoOverviewView extends StatelessWidget {
               return Column(
                 children: recent.map((doc) {
                   final d = doc.data() as Map<String, dynamic>;
-                  return _assignmentRow(
-                    d['volunteerId'] as String? ?? '—',
-                    d['needId'] as String? ?? '—',
-                    d['status'] as String? ?? 'invited',
+                  final volunteerId = d['volunteerId'] as String? ?? '';
+                  final needId = d['needId'] as String? ?? '';
+                  final status = d['status'] as String? ?? 'invited';
+                  return _AssignmentRowResolved(
+                    volunteerId: volunteerId,
+                    needId: needId,
+                    status: status,
+                    statusColor: _statusColor(status),
                   );
                 }).toList(),
               );
@@ -337,5 +341,91 @@ class NgoOverviewView extends StatelessWidget {
       default:
         return AppTheme.textGrey;
     }
+  }
+}
+
+/// Resolves volunteer name and need title from Firestore for the overview row.
+class _AssignmentRowResolved extends StatefulWidget {
+  final String volunteerId;
+  final String needId;
+  final String status;
+  final Color statusColor;
+
+  const _AssignmentRowResolved({
+    required this.volunteerId,
+    required this.needId,
+    required this.status,
+    required this.statusColor,
+  });
+
+  @override
+  State<_AssignmentRowResolved> createState() => _AssignmentRowResolvedState();
+}
+
+class _AssignmentRowResolvedState extends State<_AssignmentRowResolved> {
+  String _name = '';
+  String _needTitle = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final results = await Future.wait([
+      FirebaseFirestore.instance.collection('users').doc(widget.volunteerId).get(),
+      FirebaseFirestore.instance.collection('needs').doc(widget.needId).get(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _name = (results[0].data() as Map<String, dynamic>?)?['name'] as String? ?? widget.volunteerId;
+        _needTitle = (results[1].data() as Map<String, dynamic>?)?['title'] as String? ?? widget.needId;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = _name.isEmpty ? widget.volunteerId : _name;
+    final displayTitle = _needTitle.isEmpty ? widget.needId : _needTitle;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: AppTheme.primaryPurple.withOpacity(0.1),
+            child: const Icon(Icons.person, size: 16, color: AppTheme.primaryPurple),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(displayName,
+                    style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                    overflow: TextOverflow.ellipsis),
+                Text(displayTitle,
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textGrey),
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+                color: widget.statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12)),
+            child: Text(widget.status,
+                style: TextStyle(
+                    color: widget.statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 }
