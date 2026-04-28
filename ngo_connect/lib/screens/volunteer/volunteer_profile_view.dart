@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import '../../../theme.dart';
 import '../../../services/firebase_service.dart';
 import '../../../services/geocoding_service.dart';
@@ -47,6 +49,7 @@ class _VolunteerProfileViewState extends State<VolunteerProfileView> {
   String _pastExperience = '';
   bool _isSaving = false;
   bool _isLoading = true;
+  bool _isLocating = false;
 
   // Live stats from Firestore (Requirement 9.4)
   double _averageRating = 0.0;
@@ -87,6 +90,57 @@ class _VolunteerProfileViewState extends State<VolunteerProfileView> {
       });
     } else if (mounted) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _useCurrentLocation() async {
+    setState(() => _isLocating = true);
+    try {
+      html.window.navigator.geolocation.getCurrentPosition().then((pos) async {
+        final lat = pos.coords!.latitude!.toDouble();
+        final lng = pos.coords!.longitude!.toDouble();
+        await _onLocationObtained(lat, lng);
+      }).catchError((e) {
+        if (mounted) {
+          setState(() => _isLocating = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Location denied: $e'),
+            backgroundColor: AppTheme.warningOrange,
+          ));
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLocating = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Geolocation not supported in this browser.'),
+          backgroundColor: AppTheme.warningOrange,
+        ));
+      }
+    }
+  }
+
+  Future<void> _onLocationObtained(double lat, double lng) async {
+    // Reverse geocode lat/lng → address via backend
+    try {
+      final result = await GeocodingService.reverseGeocode(lat, lng);
+      if (mounted) {
+        setState(() {
+          _locationController.text = result ?? '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+          _isLocating = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Location set: ${_locationController.text}'),
+          backgroundColor: AppTheme.successGreen,
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _locationController.text = '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+          _isLocating = false;
+        });
+      }
     }
   }
 
@@ -273,12 +327,33 @@ class _VolunteerProfileViewState extends State<VolunteerProfileView> {
                         .titleSmall
                         ?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _locationController,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. Mumbai, Remote',
-                    prefixIcon: Icon(Icons.location_on_outlined),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _locationController,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. Mumbai, Remote',
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _isLocating ? null : _useCurrentLocation,
+                      icon: _isLocating
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.my_location, size: 16),
+                      label: const Text('Use Current', style: TextStyle(fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

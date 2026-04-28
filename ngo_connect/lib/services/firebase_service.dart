@@ -232,7 +232,6 @@ class FirebaseService {
 
   static Future<void> updateAssignmentStatus(
       String assignmentId, String status) async {
-    // Fetch the current status to validate the transition (Requirement 7.3).
     final doc = await _db
         .collection('task_assignments')
         .doc(assignmentId)
@@ -240,22 +239,52 @@ class FirebaseService {
     if (!doc.exists) {
       throw Exception('Assignment "$assignmentId" not found.');
     }
-    final currentStatus = doc.data()?['status'] as String? ?? 'invited';
+    final data = doc.data()!;
+    final currentStatus = data['status'] as String? ?? 'invited';
     final error = isValidTransition(currentStatus, status);
     if (error != null) {
-      throw Exception(error); // 400-style rejection
+      throw Exception(error);
     }
 
     final update = <String, dynamic>{'status': status};
     switch (status) {
       case 'accepted':
         update['acceptedAt'] = FieldValue.serverTimestamp();
+        // Increment applicantCount on the need
+        final needId = data['needId'] as String?;
+        if (needId != null) {
+          await _db.collection('needs').doc(needId).update({
+            'applicantCount': FieldValue.increment(1),
+          });
+        }
+        break;
+      case 'in-progress':
+        update['startedAt'] = FieldValue.serverTimestamp();
+        // Mark need as in-progress
+        final needId = data['needId'] as String?;
+        if (needId != null) {
+          await _db.collection('needs').doc(needId).update({'status': 'in-progress'});
+        }
         break;
       case 'reported':
         update['reportedAt'] = FieldValue.serverTimestamp();
         break;
       case 'verified':
         update['verifiedAt'] = FieldValue.serverTimestamp();
+        break;
+      case 'closed':
+        update['closedAt'] = FieldValue.serverTimestamp();
+        // Mark need as closed and increment completedTaskCount on volunteer
+        final needId = data['needId'] as String?;
+        final volunteerId = data['volunteerId'] as String?;
+        if (needId != null) {
+          await _db.collection('needs').doc(needId).update({'status': 'closed'});
+        }
+        if (volunteerId != null) {
+          await _db.collection('users').doc(volunteerId).update({
+            'completedTaskCount': FieldValue.increment(1),
+          });
+        }
         break;
     }
     await _db.collection('task_assignments').doc(assignmentId).update(update);

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import needs, volunteers, matching, analytics, auth
+from routers import needs, volunteers, matching, analytics, auth, geocoding
 
 app = FastAPI(title="NGO Connect API")
 
@@ -24,3 +24,4 @@ app.include_router(needs.router, prefix="/needs", tags=["Needs"])
 app.include_router(volunteers.router, prefix="/volunteers", tags=["Volunteers"])
 app.include_router(matching.router, prefix="/match", tags=["AI Matching"])
 app.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
+app.include_router(geocoding.router, prefix="/geo", tags=["Geocoding"])

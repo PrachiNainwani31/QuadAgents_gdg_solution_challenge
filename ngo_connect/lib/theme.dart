@@ -29,7 +29,6 @@ class AppTheme {
         primary: primaryPurple,
         secondary: primaryPurple,
         surface: surfaceWhite,
-        background: backgroundLight,
         error: errorRed,
       ),
       textTheme: GoogleFonts.interTextTheme().copyWith(
@@ -83,7 +82,7 @@ class AppTheme {
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: surfaceWhite,
         elevation: 0,
         shape: RoundedRectangleBorder(

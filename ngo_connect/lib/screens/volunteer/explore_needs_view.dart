@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../theme.dart';
 import '../../models/need_card.dart';
 import '../../services/firebase_service.dart';
@@ -406,15 +408,23 @@ class _ExploreNeedsViewState extends State<ExploreNeedsView> {
   }
 
   // ── Map View ───────────────────────────────────────────────────────────────
-  // Requirement 10.1: map with urgency-colored pins; tap → summary card.
-  // google_maps_flutter is disabled (pricing), so we render a schematic
-  // canvas-style map with positioned urgency pins.
+  // Requirement 10.1: real OSM map via flutter_map + urgency-colored markers.
 
   Widget _buildMapView(List<NeedCard> needs) {
+    // Filter needs that have valid coordinates
+    final mapped = needs.where((n) => n.lat != 0.0 || n.lng != 0.0).toList();
+
+    // Compute center: average of all pins, or world center fallback
+    final center = mapped.isEmpty
+        ? LatLng(20.0, 0.0)
+        : LatLng(
+            mapped.map((n) => n.lat).reduce((a, b) => a + b) / mapped.length,
+            mapped.map((n) => n.lng).reduce((a, b) => a + b) / mapped.length,
+          );
+
     return Container(
       height: 520,
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F0E8),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.borderGrey),
       ),
@@ -422,17 +432,54 @@ class _ExploreNeedsViewState extends State<ExploreNeedsView> {
         borderRadius: BorderRadius.circular(16),
         child: Stack(
           children: [
-            // Map background grid
-            CustomPaint(painter: _MapGridPainter(), size: Size.infinite),
-            // Pins
-            ...needs.map((need) => _buildMapPin(need)),
+            FlutterMap(
+              options: MapOptions(
+                initialCenter: center,
+                initialZoom: mapped.isEmpty ? 2.0 : 5.0,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.ngoconnect.app',
+                ),
+                MarkerLayer(
+                  markers: mapped.map((need) {
+                    final color = _urgencyColor(need.urgency);
+                    return Marker(
+                      point: LatLng(need.lat, need.lng),
+                      width: 36,
+                      height: 36,
+                      child: GestureDetector(
+                        onTap: () => _showNeedPopup(need),
+                        child: Tooltip(
+                          message: need.title,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 6)],
+                            ),
+                            child: Center(
+                              child: Text('${need.urgency}',
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
             // Legend
             Positioned(
               bottom: 16,
               left: 16,
               child: _buildMapLegend(),
             ),
-            // Info overlay
+            // Count badge
             Positioned(
               top: 16,
               right: 16,
@@ -442,53 +489,11 @@ class _ExploreNeedsViewState extends State<ExploreNeedsView> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: AppTheme.borderGrey)),
-                child: Text('${needs.length} needs shown',
+                child: Text('${mapped.length} needs on map',
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMapPin(NeedCard need) {
-    // Normalize lat/lng to canvas position (simple linear mapping)
-    // lat: -90..90 → 0..1, lng: -180..180 → 0..1
-    final latNorm = ((need.lat + 90) / 180).clamp(0.05, 0.95);
-    final lngNorm = ((need.lng + 180) / 360).clamp(0.05, 0.95);
-    final color = _urgencyColor(need.urgency);
-
-    return Positioned(
-      // Use fractional positioning via LayoutBuilder
-      left: null,
-      top: null,
-      child: FractionallySizedBox(
-        widthFactor: lngNorm,
-        heightFactor: latNorm,
-        child: Align(
-          alignment: Alignment.bottomRight,
-          child: GestureDetector(
-            onTap: () => _showNeedPopup(need),
-            child: Tooltip(
-              message: need.title,
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 6)],
-                ),
-                child: Center(
-                  child: Text('${need.urgency}',
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -519,8 +524,7 @@ class _ExploreNeedsViewState extends State<ExploreNeedsView> {
       padding: const EdgeInsets.only(top: 4),
       child: Row(
         children: [
-          Container(
-              width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 6),
           Text(label, style: const TextStyle(fontSize: 11)),
         ],
@@ -630,24 +634,4 @@ class _ExploreNeedsViewState extends State<ExploreNeedsView> {
       MaterialPageRoute(builder: (_) => TaskDetailView(need: need)),
     );
   }
-}
-
-/// Simple grid painter for the map background.
-class _MapGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFCCDDCC)
-      ..strokeWidth = 0.5;
-    const step = 40.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

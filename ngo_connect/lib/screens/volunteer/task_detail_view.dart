@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../theme.dart';
 import '../../models/need_card.dart';
 import '../../services/firebase_service.dart';
+import '../../services/geocoding_service.dart';
 
 /// TaskDetailView — shows full need details, embedded coordinator map,
 /// and accept/decline flow.
@@ -31,12 +34,52 @@ class _TaskDetailViewState extends State<TaskDetailView> {
   Future<void> _loadNgoDetails() async {
     final ngo = await FirebaseService.getNgoProfile(widget.need.ngoId);
     if (ngo != null && mounted) {
-      setState(() {
-        _ngoName = ngo['name'] as String?;
-        _coordinatorAddress = ngo['coordinatorAddress'] as String?;
-        _coordinatorLat = (ngo['coordinatorLat'] as num?)?.toDouble();
-        _coordinatorLng = (ngo['coordinatorLng'] as num?)?.toDouble();
-      });
+      double? lat = (ngo['coordinatorLat'] as num?)?.toDouble();
+      double? lng = (ngo['coordinatorLng'] as num?)?.toDouble();
+
+      // If no stored coords, geocode the coordinator address
+      if ((lat == null || lng == null) && ngo['coordinatorAddress'] != null) {
+        final geo = await GeocodingService.geocodeAddress(ngo['coordinatorAddress'] as String);
+        if (geo != null) { lat = geo.lat; lng = geo.lng; }
+      }
+
+      // Final fallback: use the need's own lat/lng
+      if (lat == null || lng == null) {
+        if (widget.need.lat != 0.0 || widget.need.lng != 0.0) {
+          lat = widget.need.lat;
+          lng = widget.need.lng;
+        } else {
+          // Geocode the need's location string
+          final geo = await GeocodingService.geocodeAddress(widget.need.location);
+          if (geo != null) { lat = geo.lat; lng = geo.lng; }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _ngoName = ngo['name'] as String?;
+          _coordinatorAddress = ngo['coordinatorAddress'] as String? ?? widget.need.location;
+          _coordinatorLat = lat;
+          _coordinatorLng = lng;
+        });
+      }
+    } else if (mounted) {
+      // No NGO profile — fall back to need location
+      double? lat, lng;
+      if (widget.need.lat != 0.0 || widget.need.lng != 0.0) {
+        lat = widget.need.lat;
+        lng = widget.need.lng;
+      } else {
+        final geo = await GeocodingService.geocodeAddress(widget.need.location);
+        if (geo != null) { lat = geo.lat; lng = geo.lng; }
+      }
+      if (mounted) {
+        setState(() {
+          _coordinatorAddress = widget.need.location;
+          _coordinatorLat = lat;
+          _coordinatorLng = lng;
+        });
+      }
     }
   }
 
@@ -417,8 +460,13 @@ class _TaskDetailViewState extends State<TaskDetailView> {
     );
   }
 
-  // Requirement 10.3: embedded map showing coordinator point
+  // Requirement 10.3: embedded OSM map showing coordinator/need location
   Widget _buildCoordinatorMap() {
+    final hasCoords = _coordinatorLat != null && _coordinatorLng != null;
+    final center = hasCoords
+        ? LatLng(_coordinatorLat!, _coordinatorLng!)
+        : const LatLng(20.0, 0.0);
+
     return Container(
       decoration: BoxDecoration(
           color: Colors.white,
@@ -439,36 +487,56 @@ class _TaskDetailViewState extends State<TaskDetailView> {
             ),
           ),
           const Divider(height: 1, color: AppTheme.borderGrey),
-          // Map canvas
-          Container(
-            height: 280,
-            decoration: const BoxDecoration(
-              color: Color(0xFFE8F0E8),
-              borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
-            ),
-            child: ClipRRect(
-              borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
-              child: Stack(
-                children: [
-                  CustomPaint(painter: _MapGridPainter(), size: Size.infinite),
-                  if (_coordinatorLat != null && _coordinatorLng != null)
-                    _buildCoordinatorPin()
-                  else
-                    const Center(
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
+            child: SizedBox(
+              height: 280,
+              child: hasCoords
+                  ? FlutterMap(
+                      options: MapOptions(
+                        initialCenter: center,
+                        initialZoom: 13.0,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.ngoconnect.app',
+                        ),
+                        MarkerLayer(markers: [
+                          Marker(
+                            point: center,
+                            width: 40,
+                            height: 40,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                      color: AppTheme.primaryPurple,
+                                      borderRadius: BorderRadius.circular(4)),
+                                  child: const Text('Here',
+                                      style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                ),
+                                const Icon(Icons.location_on, color: AppTheme.primaryPurple, size: 24),
+                              ],
+                            ),
+                          ),
+                        ]),
+                      ],
+                    )
+                  : const Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.location_searching, size: 32, color: AppTheme.textGrey),
+                          CircularProgressIndicator(strokeWidth: 2),
                           SizedBox(height: 8),
                           Text('Loading location...',
                               style: TextStyle(color: AppTheme.textGrey, fontSize: 12)),
                         ],
                       ),
                     ),
-                ],
-              ),
             ),
           ),
           if (_coordinatorAddress != null)
@@ -489,53 +557,4 @@ class _TaskDetailViewState extends State<TaskDetailView> {
       ),
     );
   }
-
-  Widget _buildCoordinatorPin() {
-    final lat = _coordinatorLat!;
-    final lng = _coordinatorLng!;
-    final latNorm = ((lat + 90) / 180).clamp(0.05, 0.95);
-    final lngNorm = ((lng + 180) / 360).clamp(0.05, 0.95);
-
-    return FractionallySizedBox(
-      widthFactor: lngNorm,
-      heightFactor: latNorm,
-      child: Align(
-        alignment: Alignment.bottomRight,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                  color: AppTheme.primaryPurple,
-                  borderRadius: BorderRadius.circular(6)),
-              child: const Text('Coordinator',
-                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-            ),
-            const Icon(Icons.location_on, color: AppTheme.primaryPurple, size: 28),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Simple grid painter for the map background.
-class _MapGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFCCDDCC)
-      ..strokeWidth = 0.5;
-    const step = 40.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -18,12 +18,13 @@ dependencies:
   cloud_firestore: ^5.0.0
   firebase_storage: ^12.0.0
   google_fonts: ^6.1.0
-  google_generative_ai: ^0.4.6
   cupertino_icons: ^1.0.6
   # google_maps_flutter: ^2.9.0  # disabled — Maps API pricing
   # geocoding: ^3.0.0            # disabled — depends on Maps API
   file_picker: ^8.0.0
   fl_chart: ^0.69.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:

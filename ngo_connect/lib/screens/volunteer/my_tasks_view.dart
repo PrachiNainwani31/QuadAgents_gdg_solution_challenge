@@ -166,24 +166,89 @@ class MyTasksView extends StatelessWidget {
     final showChat = ['accepted', 'in-progress', 'reported', 'verified']
         .contains(currentStatus);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderGrey),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4)
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('needs').doc(needId).get(),
+      builder: (context, snap) {
+        final data = snap.data?.data() as Map<String, dynamic>?;
+        final title = data?['title'] as String? ?? '';
+        final category = data?['category'] as String? ?? '';
+        final location = data?['location'] as String? ?? '';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.borderGrey),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4)
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                        color: AppTheme.primaryPurple.withOpacity(0.1),
+                        shape: BoxShape.circle),
+                    child: const Icon(Icons.assignment_outlined,
+                        size: 14, color: AppTheme.primaryPurple),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: snap.connectionState == ConnectionState.waiting
+                        ? Container(
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: AppTheme.borderGrey,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          )
+                        : Text(
+                            title.isNotEmpty ? title : 'Unnamed Need',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                  ),
+                ],
+              ),
+              if (category.isNotEmpty || location.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (category.isNotEmpty) ...[
+                      const Icon(Icons.category_outlined, size: 11, color: AppTheme.textGrey),
+                      const SizedBox(width: 3),
+                      Text(category,
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                      const SizedBox(width: 10),
+                    ],
+                    if (location.isNotEmpty) ...[
+                      const Icon(Icons.location_on_outlined, size: 11, color: AppTheme.textGrey),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(location,
+                            style: const TextStyle(fontSize: 11, color: AppTheme.textGrey),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              const SizedBox(height: 4),
+              Text('Invited: $dateStr',
+                  style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+
+              // Volunteer view is read-only — no status advance buttons
+              // Only show current status badge
+              const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                     color: AppTheme.primaryPurple.withOpacity(0.1),
                     shape: BoxShape.circle),
@@ -194,6 +259,21 @@ class MyTasksView extends StatelessWidget {
               Expanded(
                 child: _buildNeedTitle(needId),
               ),
+
+              if (currentStatus == 'closed') ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: AppTheme.successGreen.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6)),
+                  child: const Text('✓ Completed',
+                      style: TextStyle(
+                          color: AppTheme.successGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 6),

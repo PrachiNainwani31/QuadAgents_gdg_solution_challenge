@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:ngo_connect/utils/validators.dart' show computeRatingBonus;
 import 'dart:convert';
 import 'dart:math' as math;
@@ -60,66 +59,59 @@ class MatchingService {
         (b['finalScore'] as double).compareTo(a['finalScore'] as double));
     final top10 = scored.take(10).toList();
 
-    // Gemini re-ranking
+    // Re-ranking via backend
     try {
-      final prompt = '''
-Re-rank these need matches for volunteer with skills ${volunteer['skills']}.
-Matches: ${jsonEncode(top10)}
-Return ONLY valid JSON array with same fields plus updated "geminiReason" string.
-''';
-      final response = await _model.generateContent([Content.text(prompt)]);
-      final text = response.text
-              ?.replaceAll('```json', '')
-              .replaceAll('```', '')
-              .trim() ??
-          '';
-      if (text.isNotEmpty) {
-        final reranked =
-            List<Map<String, dynamic>>.from(jsonDecode(text));
+      final response = await http.post(
+        Uri.parse('$_backendUrl/match/volunteer'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'matches': top10, 'skills': volunteer['skills']}),
+      );
+      if (response.statusCode == 200) {
+        final reranked = List<Map<String, dynamic>>.from(jsonDecode(response.body)['matches'] ?? top10);
         await _storeMatches(reranked);
         return reranked;
       }
     } catch (_) {
-      // Fall back to rule-based ranking on Gemini error
+      // Fall back to rule-based ranking
     }
 
     await _storeMatches(top10);
     return top10;
   }
 
-  // Priority ranker — score urgency of needs from text
+  // Priority ranker — score urgency of needs via backend
   static Future<List<Map<String, dynamic>>> prioritizeNeeds(
       List<Map<String, dynamic>> needs) async {
-    final prompt = '''
-Analyze these NGO needs and assign urgency scores 1-100.
-Consider: people affected, deadline, skill scarcity, social impact.
-
-Needs: ${jsonEncode(needs)}
-
-Return ONLY valid JSON:
-[{"need_id":"...", "urgency_score":0-100, "priority_reason":"..."}]
-''';
-    final response = await _model.generateContent([Content.text(prompt)]);
-    final text = response.text?.replaceAll('```json', '').replaceAll('```', '').trim() ?? '[]';
-    return List<Map<String, dynamic>>.from(jsonDecode(text));
+    try {
+      final response = await http.post(
+        Uri.parse('$_backendUrl/match/prioritize-needs'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'needs': needs}),
+      );
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(jsonDecode(response.body)['ranked_needs'] ?? []);
+      }
+    } catch (_) {}
+    return [];
   }
 
   // Text parser — extract needs from uploaded survey/doc text
   static Future<List<Map<String, dynamic>>> extractNeedsFromText(
       String rawText) async {
-    final prompt = '''
-Extract volunteer needs from this community survey/report text.
-For each need found, extract: title, description, skills_needed, urgency, location.
-
-Text: "$rawText"
-
-Return ONLY valid JSON array:
-[{"title":"...", "description":"...", "skills":[], "urgency":"Medium", "location":"..."}]
-If no needs found, return [].
-''';
-    final response = await _model.generateContent([Content.text(prompt)]);
-    final text = response.text?.replaceAll('```json', '').replaceAll('```', '').trim() ?? '[]';
-    return List<Map<String, dynamic>>.from(jsonDecode(text));
+    try {
+      final response = await http.post(
+        Uri.parse('$_backendUrl/match/parse-text'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'text': rawText}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['needs'] ?? []);
+      }
+    } catch (e) {
+      // ignore, return empty
+    }
+    return [];
   }
 
   // ── Pure scoring functions ─────────────────────────────────────────────────
@@ -230,27 +222,22 @@ If no needs found, return [].
         (b['finalScore'] as double).compareTo(a['finalScore'] as double));
     final top10 = scored.take(10).toList();
 
-    // Gemini re-ranking
+    // Re-ranking via backend (best-effort, falls back to rule-based top10)
     List<Map<String, dynamic>> finalMatches = top10;
     try {
-      final prompt = '''
-Re-rank these volunteer matches for the need titled "${need['title']}".
-Matches: ${jsonEncode(top10)}
-Return ONLY valid JSON array with same fields plus updated "geminiReason" string.
-''';
-      final response = await _model.generateContent([Content.text(prompt)]);
-      final text = response.text
-              ?.replaceAll('```json', '')
-              .replaceAll('```', '')
-              .trim() ??
-          '';
-      if (text.isNotEmpty) {
-        final reranked =
-            List<Map<String, dynamic>>.from(jsonDecode(text));
-        finalMatches = reranked;
+      final response = await http.post(
+        Uri.parse('$_backendUrl/match/volunteer'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'volunteer_id': 'system', 'matches': top10}),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['matches'] != null) {
+          finalMatches = List<Map<String, dynamic>>.from(data['matches']);
+        }
       }
     } catch (_) {
-      // Fall back to rule-based ranking on Gemini error
+      // Fall back to rule-based ranking
     }
 
     await _storeMatches(finalMatches);

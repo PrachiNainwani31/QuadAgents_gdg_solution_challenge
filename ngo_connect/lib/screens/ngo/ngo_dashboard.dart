@@ -5,7 +5,6 @@ import '../../theme.dart';
 import '../../services/firebase_service.dart';
 import '../../screens/landing_page.dart';
 import 'views/ngo_overview_view.dart';
-import 'doc_upload_view.dart';
 import 'create_need_view.dart';
 import 'views/needs_management_view.dart';
 import 'views/kanban_board_view.dart';
@@ -66,12 +65,10 @@ class _NgoDashboardState extends State<NgoDashboard> {
       case 0:
         return NgoOverviewView(ngoId: uid);
       case 1:
-        return DocUploadView(ngoId: uid);
-      case 2:
         return CreateNeedView(ngoId: uid);
-      case 3:
+      case 2:
         return NeedsManagementView(ngoId: uid);
-      case 4:
+      case 3:
         return KanbanBoardView(ngoId: uid);
       case 5:
         return _NgoChatRoomsView(ngoId: uid);
